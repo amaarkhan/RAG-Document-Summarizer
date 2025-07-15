@@ -1,0 +1,17 @@
+extract_chunks:
+  description: >
+    Use the RAG tool to extract relevant context from the document "{filename}" for this query: "{query}".
+    Load the document, chunk it, create embeddings, and retrieve the most relevant sections that can help answer the user's question.
+  expected_output: >
+    Return the top 5 most relevant chunks from the document based on the user's query. Each chunk should be clearly separated and directly relevant to answering the user's question.
+  agent: chunking_agent
+
+answer_query:
+  description: >
+    Based on the context extracted by the chunking agent, provide a comprehensive answer to the user's query: "{query}".
+    Use the retrieved document sections to create an informative, accurate, and well-structured response that directly addresses what the user is asking.
+  expected_output: >
+    A complete markdown-formatted response that directly answers the user's query, incorporating insights from the retrieved document sections. 
+    Include relevant details, key points, examples, and ensure the response is helpful and addresses exactly what the user asked for.
+  agent: summarizer_agent
+  context: [extract_chunks]
