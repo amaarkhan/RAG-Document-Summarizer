@@ -43,11 +43,36 @@ Place your documents in the `documents/` folder. Supported formats:
 
 ## Running the Project
 
-To start the interactive document Q&A system:
+### Option 1: Command Line Interface (CLI)
+To start the interactive document Q&A system in the terminal:
 
 ```bash
 crewai run
 ```
+
+### Option 2: Web Interface
+To start the web application:
+
+```bash
+uv run web_app
+```
+
+Or using the script:
+
+```bash
+python -m doucment_summarizer.app
+```
+
+The web interface will be available at: http://localhost:5000
+
+## Features of the Web Interface
+
+- **📁 File Upload**: Drag and drop or browse to upload documents
+- **📚 Document Management**: View, select, and delete uploaded documents  
+- **❓ Interactive Q&A**: Ask questions through a clean web interface
+- **🤖 Real-time Processing**: Get AI-powered answers instantly
+- **📱 Responsive Design**: Works on desktop and mobile devices
+- **💡 Question Examples**: Built-in suggestions for better queries
 
 The system will:
 1. Find documents in the `documents/` folder

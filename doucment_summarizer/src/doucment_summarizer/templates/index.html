@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG Document Summarizer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            padding: 30px;
+            max-width: 800px;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .document-info {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+
+        .document-info h3 {
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .document-info p {
+            color: #666;
+            margin: 0;
+        }
+
+        .question-form {
+            margin-bottom: 30px;
+        }
+
+        .question-input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 10px;
+            font-size: 1em;
+            resize: vertical;
+            min-height: 100px;
+            margin-bottom: 15px;
+            transition: border-color 0.3s;
+        }
+
+        .question-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .ask-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: transform 0.2s;
+            width: 100%;
+        }
+
+        .ask-button:hover {
+            transform: translateY(-2px);
+        }
+
+        .ask-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .examples {
+            margin-bottom: 20px;
+        }
+
+        .examples h4 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .example-questions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .example-btn {
+            background: #f8f9fa;
+            border: 1px solid #e1e5e9;
+            padding: 8px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.3s;
+        }
+
+        .example-btn:hover {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .answer-container {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            display: none;
+            border-left: 4px solid #28a745;
+        }
+
+        .answer-container h3 {
+            color: #333;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+
+        .answer-container h3::before {
+            content: "🤖";
+            margin-right: 10px;
+        }
+
+        .answer-text {
+            color: #555;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+
+        .error-container {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+            display: none;
+            color: #721c24;
+        }
+
+        .chat-history {
+            margin-top: 30px;
+        }
+
+        .chat-item {
+            margin-bottom: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            background: #f8f9fa;
+        }
+
+        .chat-question {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .chat-answer {
+            color: #555;
+            line-height: 1.6;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+                margin: 10px;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .example-questions {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 RAG Document Summarizer</h1>
+            <p>Ask any question about your document and get intelligent answers</p>
+        </div>
+
+        {% if document %}
+        <div class="document-info">
+            <h3>📄 Document Loaded</h3>
+            <p>{{ document }}</p>
+        </div>
+        {% else %}
+        <div class="document-info" style="border-left-color: #dc3545;">
+            <h3>❌ No Document Found</h3>
+            <p>Please place a document in the 'documents' folder</p>
+        </div>
+        {% endif %}
+
+        {% if document %}
+        <div class="examples">
+            <h4>💡 Example Questions:</h4>
+            <div class="example-questions">
+                <button class="example-btn" onclick="setQuestion('Summarize this document')">Summarize this document</button>
+                <button class="example-btn" onclick="setQuestion('What are the key concepts discussed?')">Key concepts</button>
+                <button class="example-btn" onclick="setQuestion('What is the main argument?')">Main argument</button>
+                <button class="example-btn" onclick="setQuestion('Extract important statistics')">Statistics</button>
+                <button class="example-btn" onclick="setQuestion('What are the conclusions?')">Conclusions</button>
+            </div>
+        </div>
+
+        <form class="question-form" onsubmit="askQuestion(event)">
+            <textarea 
+                id="questionInput" 
+                class="question-input" 
+                placeholder="Type your question here..."
+                required
+            ></textarea>
+            <button type="submit" class="ask-button" id="askButton">
+                Ask Question
+            </button>
+        </form>
+
+        <div class="loading" id="loading">
+            <div class="loading-spinner"></div>
+            <p>Processing your question...</p>
+        </div>
+
+        <div class="error-container" id="errorContainer">
+            <p id="errorText"></p>
+        </div>
+
+        <div class="answer-container" id="answerContainer">
+            <h3>Answer</h3>
+            <div class="answer-text" id="answerText"></div>
+        </div>
+
+        <div class="chat-history" id="chatHistory"></div>
+        {% endif %}
+    </div>
+
+    <script>
+        function setQuestion(question) {
+            document.getElementById('questionInput').value = question;
+            document.getElementById('questionInput').focus();
+        }
+
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('askButton').disabled = true;
+            document.getElementById('askButton').textContent = 'Processing...';
+            document.getElementById('errorContainer').style.display = 'none';
+            document.getElementById('answerContainer').style.display = 'none';
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('askButton').disabled = false;
+            document.getElementById('askButton').textContent = 'Ask Question';
+        }
+
+        function showError(message) {
+            document.getElementById('errorText').textContent = message;
+            document.getElementById('errorContainer').style.display = 'block';
+            document.getElementById('answerContainer').style.display = 'none';
+        }
+
+        function showAnswer(answer, question) {
+            document.getElementById('answerText').textContent = answer;
+            document.getElementById('answerContainer').style.display = 'block';
+            document.getElementById('errorContainer').style.display = 'none';
+            
+            // Add to chat history
+            addToChatHistory(question, answer);
+            
+            // Clear the input
+            document.getElementById('questionInput').value = '';
+        }
+
+        function addToChatHistory(question, answer) {
+            const chatHistory = document.getElementById('chatHistory');
+            const chatItem = document.createElement('div');
+            chatItem.className = 'chat-item';
+            chatItem.innerHTML = `
+                <div class="chat-question">Q: ${question}</div>
+                <div class="chat-answer">A: ${answer}</div>
+            `;
+            chatHistory.insertBefore(chatItem, chatHistory.firstChild);
+        }
+
+        async function askQuestion(event) {
+            event.preventDefault();
+            
+            const question = document.getElementById('questionInput').value.trim();
+            if (!question) {
+                showError('Please enter a question');
+                return;
+            }
+
+            console.log('Sending question:', question);
+            showLoading();
+
+            try {
+                const response = await fetch('/ask', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ question: question })
+                });
+
+                console.log('Response status:', response.status);
+                const data = await response.json();
+                console.log('Response data:', data);
+
+                if (response.ok) {
+                    showAnswer(data.answer, question);
+                } else {
+                    showError(data.error || 'An error occurred');
+                }
+            } catch (error) {
+                console.error('Request failed:', error);
+                showError('Failed to connect to server. Please try again.');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // Allow Enter+Shift for new line, Enter alone to submit
+        document.getElementById('questionInput').addEventListener('keydown', function(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                askQuestion(event);
+            }
+        });
+    </script>
+</body>
+</html>
