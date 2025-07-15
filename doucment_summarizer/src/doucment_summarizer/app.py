@@ -2,16 +2,26 @@
 """
 Flask Web Application for RAG Document Summarizer
 """
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, redirect, url_for
 import os
 from datetime import datetime
 from doucment_summarizer.crew import DocumentSummarizer
 import warnings
+from werkzeug.utils import secure_filename
 
 # Suppress warnings
 warnings.filterwarnings("ignore", category=SyntaxWarning, module="pysbd")
 
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+app.config['UPLOAD_FOLDER'] = 'documents'
+
+# Allowed file extensions
+ALLOWED_EXTENSIONS = {'pdf', 'txt', 'docx', 'doc', 'md'}
+
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # Global variables to store document and crew instance
 current_document = None
@@ -20,6 +30,9 @@ crew_instance = None
 def initialize_app():
     """Initialize the application with a document"""
     global current_document, crew_instance
+    
+    # Ensure upload directory exists
+    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     
     # Look for a sample document in common locations
     sample_files = [
@@ -45,7 +58,95 @@ def initialize_app():
 @app.route('/')
 def index():
     """Main page"""
-    return render_template('index.html', document=current_document)
+    # Get list of uploaded documents
+    uploaded_docs = []
+    if os.path.exists(app.config['UPLOAD_FOLDER']):
+        for file in os.listdir(app.config['UPLOAD_FOLDER']):
+            if allowed_file(file):
+                uploaded_docs.append(file)
+    
+    return render_template('index.html', document=current_document, uploaded_docs=uploaded_docs)
+
+@app.route('/upload', methods=['POST'])
+def upload_file():
+    """Handle file upload"""
+    try:
+        if 'document' not in request.files:
+            return jsonify({'error': 'No file selected'}), 400
+        
+        file = request.files['document']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        if file and allowed_file(file.filename):
+            # Use secure_filename equivalent
+            filename = file.filename
+            # Basic security: remove dangerous characters
+            filename = "".join(c for c in filename if c.isalnum() or c in '._-')
+            
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
+            
+            # Update current document to the newly uploaded one
+            global current_document, crew_instance
+            current_document = filepath
+            
+            # Reinitialize crew with new document
+            try:
+                crew_instance = DocumentSummarizer().crew()
+                print(f"📄 New document uploaded and loaded: {current_document}")
+                
+                return jsonify({
+                    'success': True,
+                    'message': f'Document "{filename}" uploaded successfully!',
+                    'filename': filename
+                })
+            except Exception as e:
+                print(f"Error initializing crew with new document: {e}")
+                return jsonify({'error': f'Document uploaded but failed to initialize: {str(e)}'}), 500
+        else:
+            return jsonify({'error': 'Invalid file type. Only PDF, TXT, DOCX, DOC, and MD files are allowed.'}), 400
+            
+    except Exception as e:
+        print(f"❌ Error uploading file: {e}")
+        return jsonify({'error': f'Error uploading file: {str(e)}'}), 500
+
+@app.route('/select_document', methods=['POST'])
+def select_document():
+    """Handle document selection"""
+    try:
+        data = request.get_json()
+        filename = data.get('filename', '').strip()
+        
+        if not filename:
+            return jsonify({'error': 'No filename provided'}), 400
+        
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        
+        if not os.path.exists(filepath):
+            return jsonify({'error': 'Document not found'}), 404
+        
+        # Update current document
+        global current_document, crew_instance
+        current_document = filepath
+        
+        # Reinitialize crew with selected document
+        try:
+            crew_instance = DocumentSummarizer().crew()
+            print(f"📄 Document selected: {current_document}")
+            
+            return jsonify({
+                'success': True,
+                'message': f'Document "{filename}" selected successfully!',
+                'filename': filename
+            })
+        except Exception as e:
+            print(f"Error initializing crew with selected document: {e}")
+            return jsonify({'error': f'Failed to initialize with selected document: {str(e)}'}), 500
+            
+    except Exception as e:
+        print(f"❌ Error selecting document: {e}")
+        return jsonify({'error': f'Error selecting document: {str(e)}'}), 500
 
 @app.route('/ask', methods=['POST'])
 def ask_question():

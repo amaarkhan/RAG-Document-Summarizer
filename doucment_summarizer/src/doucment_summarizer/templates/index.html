@@ -219,6 +219,96 @@
             line-height: 1.6;
         }
 
+        .upload-section {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #17a2b8;
+        }
+
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 15px;
+        }
+
+        .upload-area:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+
+        .upload-area.dragover {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+
+        .upload-button {
+            background: #17a2b8;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-left: 10px;
+            transition: background 0.3s;
+        }
+
+        .upload-button:hover {
+            background: #138496;
+        }
+
+        .upload-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .document-list {
+            margin-top: 15px;
+        }
+
+        .document-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+            margin-bottom: 5px;
+            border: 1px solid #e1e5e9;
+        }
+
+        .document-item:hover {
+            background: #f8f9fa;
+        }
+
+        .document-item.active {
+            background: #e3f2fd;
+            border-color: #667eea;
+        }
+
+        .select-doc-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.8em;
+        }
+
+        .select-doc-btn:hover {
+            background: #218838;
+        }
+
+        #file-input {
+            display: none;
+        }
+
         @media (max-width: 768px) {
             .container {
                 padding: 20px;
@@ -240,6 +330,36 @@
         <div class="header">
             <h1>🤖 RAG Document Summarizer</h1>
             <p>Ask any question about your document and get intelligent answers</p>
+        </div>
+
+        <!-- Upload Section -->
+        <div class="upload-section">
+            <h3>📁 Upload Document</h3>
+            <p style="margin-bottom: 15px; color: #666;">Upload a new document or select from existing ones</p>
+            
+            <div class="upload-area" onclick="document.getElementById('file-input').click()" 
+                 ondrop="dropHandler(event)" ondragover="dragOverHandler(event)" ondragleave="dragLeaveHandler(event)">
+                <div>
+                    <p><strong>📄 Drop your document here or click to browse</strong></p>
+                    <p style="color: #666; font-size: 0.9em;">Supported formats: PDF, TXT, DOCX, DOC, MD (Max: 16MB)</p>
+                </div>
+            </div>
+            
+            <input type="file" id="file-input" accept=".pdf,.txt,.docx,.doc,.md" onchange="uploadFile(event)">
+            
+            {% if uploaded_docs %}
+            <div class="document-list">
+                <h4>📚 Available Documents:</h4>
+                {% for doc in uploaded_docs %}
+                <div class="document-item {% if document and document.endswith(doc) %}active{% endif %}">
+                    <span>{{ doc }}</span>
+                    <button class="select-doc-btn" onclick="selectDocument('{{ doc }}')">
+                        {% if document and document.endswith(doc) %}✓ Active{% else %}Select{% endif %}
+                    </button>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
         </div>
 
         {% if document %}
@@ -300,6 +420,144 @@
         function setQuestion(question) {
             document.getElementById('questionInput').value = question;
             document.getElementById('questionInput').focus();
+        }
+
+        // Upload functionality
+        function dragOverHandler(ev) {
+            ev.preventDefault();
+            ev.currentTarget.classList.add('dragover');
+        }
+
+        function dragLeaveHandler(ev) {
+            ev.currentTarget.classList.remove('dragover');
+        }
+
+        function dropHandler(ev) {
+            ev.preventDefault();
+            ev.currentTarget.classList.remove('dragover');
+            
+            const files = ev.dataTransfer.files;
+            if (files.length > 0) {
+                uploadFileHandler(files[0]);
+            }
+        }
+
+        function uploadFile(event) {
+            const file = event.target.files[0];
+            if (file) {
+                uploadFileHandler(file);
+            }
+        }
+
+        async function uploadFileHandler(file) {
+            // Validate file type
+            const allowedTypes = ['application/pdf', 'text/plain', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword', 'text/markdown'];
+            const allowedExtensions = ['.pdf', '.txt', '.docx', '.doc', '.md'];
+            
+            const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+            if (!allowedExtensions.includes(fileExtension)) {
+                showError('Invalid file type. Only PDF, TXT, DOCX, DOC, and MD files are allowed.');
+                return;
+            }
+
+            // Validate file size (16MB = 16 * 1024 * 1024 bytes)
+            if (file.size > 16 * 1024 * 1024) {
+                showError('File too large. Maximum size is 16MB.');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('document', file);
+
+            try {
+                showUploadLoading(true);
+                
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showSuccess(data.message);
+                    // Reload page to update document list
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
+                } else {
+                    showError(data.error || 'Upload failed');
+                }
+            } catch (error) {
+                console.error('Upload failed:', error);
+                showError('Failed to upload file. Please try again.');
+            } finally {
+                showUploadLoading(false);
+            }
+        }
+
+        async function selectDocument(filename) {
+            try {
+                showUploadLoading(true);
+                
+                const response = await fetch('/select_document', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ filename: filename })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showSuccess(data.message);
+                    // Reload page to update active document
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
+                } else {
+                    showError(data.error || 'Failed to select document');
+                }
+            } catch (error) {
+                console.error('Document selection failed:', error);
+                showError('Failed to select document. Please try again.');
+            } finally {
+                showUploadLoading(false);
+            }
+        }
+
+        function showUploadLoading(show) {
+            const uploadArea = document.querySelector('.upload-area');
+            if (show) {
+                uploadArea.style.opacity = '0.6';
+                uploadArea.style.pointerEvents = 'none';
+            } else {
+                uploadArea.style.opacity = '1';
+                uploadArea.style.pointerEvents = 'auto';
+            }
+        }
+
+        function showSuccess(message) {
+            // Create temporary success message
+            const successDiv = document.createElement('div');
+            successDiv.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #28a745;
+                color: white;
+                padding: 15px;
+                border-radius: 5px;
+                z-index: 1000;
+                box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            `;
+            successDiv.textContent = message;
+            document.body.appendChild(successDiv);
+            
+            setTimeout(() => {
+                document.body.removeChild(successDiv);
+            }, 3000);
         }
 
         function showLoading() {
